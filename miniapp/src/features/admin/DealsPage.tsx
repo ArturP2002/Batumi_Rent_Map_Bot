@@ -1,91 +1,13 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "@/shared/api";
 import { StateBox } from "@/shared/ui";
-
-type Deal = {
-  id: number;
-  property_id: number;
-  realtor_id: number;
-  client_user_id: number;
-  status: string;
-  start_date?: string;
-  end_date?: string;
-  confirmations: { side: string; decision: string }[];
-};
-
-export function DealsPage() {
-  const [items, setItems] = useState<Deal[]>([]);
-  const [comments, setComments] = useState<Record<number, string>>({});
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  async function load() {
-    setLoading(true);
-    setError(null);
-    try {
-      setItems(await api<Deal[]>("/api/admin/deals?status=pending"));
-    } catch (e) {
-      setError((e as Error).message || "Ошибка загрузки");
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    void load();
-  }, []);
-
-  async function decide(id: number, decision: "approved" | "rejected") {
-    await api(`/api/admin/deals/${id}/decide`, {
-      method: "POST",
-      body: JSON.stringify({ decision, comment: comments[id] || null }),
-    });
-    setComments((prev) => {
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
-    await load();
-  }
-
-  if (loading) return <StateBox title="Загрузка…" />;
-  if (error) return <StateBox title={error} />;
-  if (!items.length) return <StateBox title="Нет сделок на проверке" />;
-
-  return (
-    <div className="stack">
-      {items.map((d) => (
-        <div className="card" key={d.id}>
-          <strong>Сделка #{d.id}</strong>
-          <div className="muted">
-            объект {d.property_id} · риелтор {d.realtor_id} · клиент {d.client_user_id}
-          </div>
-          <div className="muted">
-            {d.start_date || "—"} → {d.end_date || "—"}
-          </div>
-          <div className="muted">
-            {d.confirmations.map((c) => `${c.side}:${c.decision}`).join(" · ")}
-          </div>
-          <div className="field">
-            <label>Комментарий</label>
-            <input
-              value={comments[d.id] || ""}
-              onChange={(e) =>
-                setComments((prev) => ({ ...prev, [d.id]: e.target.value }))
-              }
-            />
-          </div>
-          <div className="stack">
-            <button className="btn btn-primary" onClick={() => void decide(d.id, "approved")}>
-              Подтвердить
-            </button>
-            <button className="btn btn-danger" onClick={() => void decide(d.id, "rejected")}>
-              Отклонить
-            </button>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+import "./AdminWorkflow.css";
+type Deal={id:number;property_id:number;realtor_id:number;client_user_id:number;status:string;start_date?:string|null;end_date?:string|null;confirmations:{side:string;decision:string}[]};
+const side:Record<string,string>={realtor:"Риелтор",client:"Арендатор",admin:"Администратор"};const decision:Record<string,string>={approved:"Подтверждено",rejected:"Отклонено",pending:"Ожидает"};
+export function DealsPage(){const [items,setItems]=useState<Deal[]>([]);const [comments,setComments]=useState<Record<number,string>>({});const [error,setError]=useState("");const [loading,setLoading]=useState(true);const [busy,setBusy]=useState<number|null>(null);const [notice,setNotice]=useState("");
+ async function load(){setLoading(true);try{setItems(await api<Deal[]>("/api/admin/deals?status=pending"));setError("")}catch(e){setError((e as Error).message||"Не удалось загрузить сделки")}finally{setLoading(false)}}
+ useEffect(()=>{void load()},[]);
+ async function decide(id:number,value:"approved"|"rejected"){if(busy!==null||!window.confirm(`${value==="approved"?"Подтвердить":"Отклонить"} сделку №${id}?`))return;setBusy(id);setError("");try{await api(`/api/admin/deals/${id}/decide`,{method:"POST",body:JSON.stringify({decision:value,comment:comments[id]?.trim()||null})});setComments(v=>{const next={...v};delete next[id];return next});setNotice("Решение сохранено");await load()}catch(e){setError((e as Error).message||"Не удалось сохранить решение")}finally{setBusy(null)}}
+ return <div className="mbw-page"><header className="mbw-heading"><span className="mbw-eyebrow">ПРОВЕРКА АРЕНДЫ</span><h1>Сделки<span>.</span></h1><p>Администратор подтверждает сделки после проверки участников.</p></header>{error&&<div className="mbw-alert" role="alert">{error}</div>}{notice&&<div className="mbw-note" role="status">{notice}</div>}{loading?<StateBox title="Загружаем сделки…"/>:!items.length?<div className="mbw-empty">Нет сделок на проверке.</div>:<div className="mbw-work-grid">{items.map(d=><article className="mbw-panel" key={d.id}><div className="mbw-card-head"><div><span className="mbw-eyebrow">СДЕЛКА #{d.id}</span><h2>Подтверждение аренды</h2></div><span className="mbw-status is-moderation">Ожидает решения</span></div><div className="mbw-facts"><div><small>Квартира</small><Link to={`/property/${d.property_id}`}>Объект #{d.property_id} ↗</Link></div><div><small>Риелтор</small><strong>#{d.realtor_id}</strong></div><div><small>Арендатор</small><strong>#{d.client_user_id}</strong></div><div><small>Даты</small><strong>{d.start_date||"—"} — {d.end_date||"—"}</strong></div></div><h3 className="mbw-mini-title">Подтверждения</h3><div className="mbw-confirmations">{["realtor","client","admin"].map(s=>{const c=d.confirmations.find(v=>v.side===s);return <div key={s}><span>{side[s]}</span><strong className={`is-${c?.decision||"pending"}`}>{decision[c?.decision||"pending"]||c?.decision}</strong></div>})}</div><label className="mbw-field">Комментарий (необязательно)<textarea rows={2} value={comments[d.id]||""} onChange={e=>setComments(v=>({...v,[d.id]:e.target.value}))} placeholder="Уточнения по сделке"/></label><div className="mbw-actions"><button className="mbw-btn primary" disabled={busy!==null} onClick={()=>void decide(d.id,"approved")}>Подтвердить</button><button className="mbw-btn danger-outline" disabled={busy!==null} onClick={()=>void decide(d.id,"rejected")}>Отклонить</button></div></article>)}</div>}</div>
 }

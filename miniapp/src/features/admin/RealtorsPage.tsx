@@ -1,97 +1,19 @@
 import { useEffect, useState } from "react";
 import { api } from "@/shared/api";
 import { StateBox } from "@/shared/ui";
-
-type Realtor = {
-  id: number;
-  display_name: string;
-  telegram_id?: number;
-  rating_avg: number;
-  active_listings: number;
-  is_blocked: boolean;
-  phone?: string;
-};
-
-export function RealtorsPage() {
-  const [items, setItems] = useState<Realtor[]>([]);
-  const [form, setForm] = useState({
-    telegram_id: "",
-    display_name: "",
-    phone: "",
-    whatsapp: "",
-    telegram_contact: "",
-  });
-
-  async function load() {
-    setItems(await api<Realtor[]>("/api/admin/realtors"));
-  }
-
-  useEffect(() => {
-    void load();
-  }, []);
-
-  async function create() {
-    await api("/api/admin/realtors", {
-      method: "POST",
-      body: JSON.stringify({
-        telegram_id: Number(form.telegram_id),
-        display_name: form.display_name,
-        phone: form.phone || null,
-        whatsapp: form.whatsapp || null,
-        telegram_contact: form.telegram_contact || null,
-      }),
-    });
-    setForm({
-      telegram_id: "",
-      display_name: "",
-      phone: "",
-      whatsapp: "",
-      telegram_contact: "",
-    });
-    await load();
-  }
-
-  async function toggleBlock(r: Realtor) {
-    await api(`/api/admin/realtors/${r.id}/block?blocked=${!r.is_blocked}`, {
-      method: "POST",
-    });
-    await load();
-  }
-
-  return (
-    <>
-      <div className="panel">
-        <h3 style={{ marginTop: 0 }}>Добавить риелтора</h3>
-        {(["telegram_id", "display_name", "phone", "whatsapp", "telegram_contact"] as const).map(
-          (k) => (
-            <div className="field" key={k}>
-              <label>{k}</label>
-              <input
-                value={form[k]}
-                onChange={(e) => setForm((p) => ({ ...p, [k]: e.target.value }))}
-              />
-            </div>
-          ),
-        )}
-        <button className="btn btn-primary btn-block" onClick={() => void create()}>
-          Сохранить
-        </button>
-      </div>
-      {!items.length && <StateBox title="Риелторов пока нет" />}
-      <div className="stack">
-        {items.map((r) => (
-          <div className="card" key={r.id}>
-            <strong>{r.display_name}</strong>
-            <div className="muted">
-              tg:{r.telegram_id} · ★{r.rating_avg} · объектов {r.active_listings}
-              {r.is_blocked ? " · BLOCKED" : ""}
-            </div>
-            <button className="btn btn-secondary" onClick={() => void toggleBlock(r)}>
-              {r.is_blocked ? "Разблокировать" : "Заблокировать"}
-            </button>
-          </div>
-        ))}
-      </div>
-    </>
-  );
+import "./AdminWorkflow.css";
+type Realtor={id:number;display_name:string;telegram_id?:number|null;rating_avg:number;rating_count?:number;active_listings:number;is_blocked:boolean;phone?:string|null;photo_url?:string|null};
+type Form={telegram_id:string;display_name:string;phone:string;whatsapp:string;telegram_contact:string};
+const blank:Form={telegram_id:"",display_name:"",phone:"",whatsapp:"",telegram_contact:""};
+export function RealtorsPage(){const [items,setItems]=useState<Realtor[]>([]);const [form,setForm]=useState<Form>(blank);const [showForm,setShowForm]=useState(false);const [search,setSearch]=useState("");const [loading,setLoading]=useState(true);const [busy,setBusy]=useState(false);const [error,setError]=useState("");const [notice,setNotice]=useState("");
+ async function load(){setLoading(true);try{setItems(await api<Realtor[]>("/api/admin/realtors"));setError("")}catch(e){setError((e as Error).message||"Не удалось получить список риелторов")}finally{setLoading(false)}}
+ useEffect(()=>{void load()},[]);
+ async function create(e:React.FormEvent){e.preventDefault();if(busy)return;const id=Number(form.telegram_id);if(!Number.isSafeInteger(id)||id<=0||!form.display_name.trim()){setError("Укажите корректный Telegram ID и имя");return}setBusy(true);setError("");try{await api("/api/admin/realtors",{method:"POST",body:JSON.stringify({telegram_id:id,display_name:form.display_name.trim(),phone:form.phone.trim()||null,whatsapp:form.whatsapp.trim()||null,telegram_contact:form.telegram_contact.trim()||null})});setForm(blank);setShowForm(false);setNotice("Риелтор добавлен");await load()}catch(e){setError((e as Error).message||"Не удалось добавить риелтора")}finally{setBusy(false)}}
+ async function toggle(r:Realtor){if(busy||!window.confirm(`${r.is_blocked?"Разблокировать":"Заблокировать"} риелтора «${r.display_name}»?`))return;setBusy(true);setError("");try{await api(`/api/admin/realtors/${r.id}/block?blocked=${!r.is_blocked}`,{method:"POST"});setNotice("Статус риелтора обновлён");await load()}catch(e){setError((e as Error).message||"Не удалось изменить доступ")}finally{setBusy(false)}}
+ const filtered=items.filter(r=>`${r.display_name} ${r.telegram_id||""}`.toLowerCase().includes(search.toLowerCase()));
+ return <div className="mbw-page"><header className="mbw-heading mbw-heading-row"><div><span className="mbw-eyebrow">КОМАНДА ПЛАТФОРМЫ</span><h1>Риелторы<span>.</span></h1><p>Доступ к публикации объявлений и управление агентами.</p></div><button className="mbw-btn primary" onClick={()=>setShowForm(v=>!v)}>{showForm?"Закрыть форму":"+ Добавить риелтора"}</button></header>
+ {error&&<div className="mbw-alert" role="alert">{error}</div>}{notice&&<div className="mbw-note" role="status">{notice}</div>}
+ {showForm&&<form className="mbw-panel" onSubmit={e=>void create(e)}><h2>Новый риелтор</h2><div className="mbw-two-fields"><label className="mbw-field">Telegram ID *<input required inputMode="numeric" value={form.telegram_id} onChange={e=>setForm(v=>({...v,telegram_id:e.target.value}))} placeholder="Например, 123456789"/></label><label className="mbw-field">Имя / название *<input required value={form.display_name} onChange={e=>setForm(v=>({...v,display_name:e.target.value}))} placeholder="Имя агента"/></label><label className="mbw-field">Телефон<input type="tel" value={form.phone} onChange={e=>setForm(v=>({...v,phone:e.target.value}))}/></label><label className="mbw-field">WhatsApp<input value={form.whatsapp} onChange={e=>setForm(v=>({...v,whatsapp:e.target.value}))}/></label><label className="mbw-field">Telegram-контакт<input value={form.telegram_contact} onChange={e=>setForm(v=>({...v,telegram_contact:e.target.value}))} placeholder="@username"/></label></div><button type="submit" className="mbw-btn primary" disabled={busy}>{busy?"Сохраняем…":"Сохранить риелтора"}</button></form>}
+ <label className="mbw-search"><span>⌕</span><input aria-label="Поиск риелтора" placeholder="Поиск по имени или Telegram ID" value={search} onChange={e=>setSearch(e.target.value)}/></label>
+ {loading?<StateBox title="Загружаем риелторов…"/>:filtered.length===0?<div className="mbw-empty">Риелторов по вашему запросу нет.</div>:<div className="mbw-realtor-grid">{filtered.map(r=><article className="mbw-panel mbw-agent" key={r.id}><div className="mbw-agent-head"><span className="mbw-agent-avatar">{r.photo_url?<img src={r.photo_url} alt=""/>:r.display_name.charAt(0).toUpperCase()}</span><span className={`mbw-status ${r.is_blocked?"is-blocked":"is-active"}`}>{r.is_blocked?"Заблокирован":"Активен"}</span></div><h2>{r.display_name}</h2><p className="mbw-hint">Telegram ID: {r.telegram_id||"не указан"}</p><div className="mbw-agent-stats"><span><strong>{r.active_listings}</strong> объявлений</span><span><strong>★ {Number(r.rating_avg||0).toFixed(1)}</strong> рейтинг</span></div><button className={`mbw-btn ${r.is_blocked?"primary":"danger-outline"}`} disabled={busy} onClick={()=>void toggle(r)}>{r.is_blocked?"Разблокировать":"Заблокировать"}</button></article>)}</div>}</div>
 }

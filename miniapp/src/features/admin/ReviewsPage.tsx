@@ -1,81 +1,11 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "@/shared/api";
 import { StateBox } from "@/shared/ui";
-
-type Review = {
-  id: number;
-  rating: number;
-  text: string;
-  realtor_id: number;
-  deal_id: number;
-  status: string;
-};
-
-export function ReviewsPage() {
-  const [items, setItems] = useState<Review[]>([]);
-  const [comments, setComments] = useState<Record<number, string>>({});
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  async function load() {
-    setLoading(true);
-    setError(null);
-    try {
-      setItems(await api<Review[]>("/api/admin/reviews?status=pending_moderation"));
-    } catch (e) {
-      setError((e as Error).message || "Ошибка загрузки");
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    void load();
-  }, []);
-
-  async function act(id: number, action: string) {
-    await api(`/api/admin/reviews/${id}/moderate`, {
-      method: "POST",
-      body: JSON.stringify({ action, comment: comments[id] || null }),
-    });
-    setComments((prev) => {
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
-    await load();
-  }
-
-  if (loading) return <StateBox title="Загрузка…" />;
-  if (error) return <StateBox title={error} />;
-  if (!items.length) return <StateBox title="Очередь отзывов пуста" />;
-
-  return (
-    <div className="stack">
-      {items.map((r) => (
-        <div className="card" key={r.id}>
-          <strong>
-            #{r.id} · {"★".repeat(r.rating)} · сделка {r.deal_id}
-          </strong>
-          <p>{r.text}</p>
-          <input
-            placeholder="Причина отклонения"
-            value={comments[r.id] || ""}
-            onChange={(e) =>
-              setComments((prev) => ({ ...prev, [r.id]: e.target.value }))
-            }
-          />
-          <div className="stack" style={{ marginTop: 8 }}>
-            <button className="btn btn-primary" onClick={() => void act(r.id, "publish")}>
-              Опубликовать
-            </button>
-            <button className="btn btn-danger" onClick={() => void act(r.id, "reject")}>
-              Отклонить
-            </button>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+import "./AdminWorkflow.css";
+type Review={id:number;rating:number;text:string;realtor_id:number;deal_id:number;status:string};
+export function ReviewsPage(){const [items,setItems]=useState<Review[]>([]);const [comments,setComments]=useState<Record<number,string>>({});const [loading,setLoading]=useState(true);const [busy,setBusy]=useState<number|null>(null);const [error,setError]=useState("");const [notice,setNotice]=useState("");
+ async function load(){setLoading(true);try{setItems(await api<Review[]>("/api/admin/reviews?status=pending_moderation"));setError("")}catch(e){setError((e as Error).message||"Не удалось загрузить отзывы")}finally{setLoading(false)}}useEffect(()=>{void load()},[]);
+ async function moderate(id:number,action:"publish"|"reject"){if(busy!==null)return;if(action==="reject"&&!comments[id]?.trim()){setError("Укажите причину отклонения отзыва");return}if(!window.confirm(`${action==="publish"?"Опубликовать":"Отклонить"} отзыв №${id}?`))return;setBusy(id);setError("");try{await api(`/api/admin/reviews/${id}/moderate`,{method:"POST",body:JSON.stringify({action,comment:comments[id]?.trim()||null})});setNotice(action==="publish"?"Отзыв опубликован":"Отзыв отклонён");await load()}catch(e){setError((e as Error).message||"Не удалось обработать отзыв")}finally{setBusy(null)}}
+ return <div className="mbw-page"><header className="mbw-heading"><span className="mbw-eyebrow">ДОВЕРИЕ К ПЛАТФОРМЕ</span><h1>Отзывы<span>.</span></h1><p>Проверяйте тексты перед публикацией в профиле риелтора.</p></header>{error&&<div className="mbw-alert" role="alert">{error}</div>}{notice&&<div className="mbw-note" role="status">{notice}</div>}{loading?<StateBox title="Загружаем отзывы…"/>:!items.length?<div className="mbw-empty">Новых отзывов на модерации нет.</div>:<div className="mbw-work-grid">{items.map(r=><article className="mbw-panel" key={r.id}><div className="mbw-card-head"><div><span className="mbw-eyebrow">ОТЗЫВ #{r.id}</span><h2>Проверка публикации</h2></div><span className="mbw-status is-moderation">Модерация</span></div><div className="mbw-stars" aria-label={`Оценка ${r.rating} из 5`}>{"★".repeat(Math.max(0,Math.min(5,r.rating)))}<span>{Number(r.rating).toFixed(1)} / 5</span></div><blockquote className="mbw-quote">{r.text}</blockquote><div className="mbw-review-links"><Link to={`/realtor/${r.realtor_id}`}>Риелтор #{r.realtor_id} ↗</Link><span>Сделка #{r.deal_id}</span></div><label className="mbw-field">Причина отклонения<textarea rows={2} value={comments[r.id]||""} onChange={e=>setComments(v=>({...v,[r.id]:e.target.value}))} placeholder="Заполняется при отклонении"/></label><div className="mbw-actions"><button className="mbw-btn primary" disabled={busy!==null} onClick={()=>void moderate(r.id,"publish")}>Опубликовать</button><button className="mbw-btn danger-outline" disabled={busy!==null} onClick={()=>void moderate(r.id,"reject")}>Отклонить</button></div></article>)}</div>}</div>
 }

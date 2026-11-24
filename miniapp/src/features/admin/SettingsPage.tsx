@@ -1,77 +1,11 @@
 import { useEffect, useState } from "react";
 import { api } from "@/shared/api";
 import { StateBox } from "@/shared/ui";
-
-type Settings = {
-  freshness_days: number;
-  freshness_remind_days: number;
-  freshness_hide_days: number;
-  districts: string[];
-};
-
-export function SettingsPage() {
-  const [data, setData] = useState<Settings | null>(null);
-  const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    void api<Settings>("/api/admin/settings").then(setData);
-  }, []);
-
-  async function save() {
-    if (!data) return;
-    setData(await api<Settings>("/api/admin/settings", {
-      method: "PUT",
-      body: JSON.stringify(data),
-    }));
-    setSaved(true);
-  }
-
-  if (!data) return <StateBox title="Загрузка…" />;
-
-  return (
-    <div className="panel">
-      <div className="field">
-        <label>Запрос актуальности (дней)</label>
-        <input
-          type="number"
-          value={data.freshness_days}
-          onChange={(e) => setData({ ...data, freshness_days: Number(e.target.value) })}
-        />
-      </div>
-      <div className="field">
-        <label>Напоминание (+дней)</label>
-        <input
-          type="number"
-          value={data.freshness_remind_days}
-          onChange={(e) =>
-            setData({ ...data, freshness_remind_days: Number(e.target.value) })
-          }
-        />
-      </div>
-      <div className="field">
-        <label>Скрытие (+дней)</label>
-        <input
-          type="number"
-          value={data.freshness_hide_days}
-          onChange={(e) => setData({ ...data, freshness_hide_days: Number(e.target.value) })}
-        />
-      </div>
-      <div className="field">
-        <label>Районы (через запятую)</label>
-        <textarea
-          value={data.districts.join(", ")}
-          onChange={(e) =>
-            setData({
-              ...data,
-              districts: e.target.value.split(",").map((x) => x.trim()).filter(Boolean),
-            })
-          }
-        />
-      </div>
-      <button className="btn btn-primary btn-block" onClick={() => void save()}>
-        Сохранить
-      </button>
-      {saved && <div className="muted">Сохранено</div>}
-    </div>
-  );
+import "./AdminWorkflow.css";
+type Settings={freshness_days:number;freshness_remind_days:number;freshness_hide_days:number;districts:string[]};
+export function SettingsPage(){const [data,setData]=useState<Settings|null>(null);const [districtText,setDistrictText]=useState("");const [loading,setLoading]=useState(true);const [saving,setSaving]=useState(false);const [saved,setSaved]=useState(false);const [error,setError]=useState("");
+ useEffect(()=>{void (async()=>{try{const v=await api<Settings>("/api/admin/settings");setData(v);setDistrictText(v.districts.join(", "))}catch(e){setError((e as Error).message||"Не удалось загрузить настройки")}finally{setLoading(false)}})()},[]);
+ async function save(e:React.FormEvent){e.preventDefault();if(!data||saving)return;const nums=[data.freshness_days,data.freshness_remind_days,data.freshness_hide_days];if(nums.some(n=>!Number.isInteger(n)||n<1||n>365)){setError("Укажите целое количество дней от 1 до 365");return}setSaving(true);setSaved(false);setError("");try{const body={...data,districts:[...new Set(districtText.split(",").map(x=>x.trim()).filter(Boolean))]};const updated=await api<Settings>("/api/admin/settings",{method:"PUT",body:JSON.stringify(body)});setData(updated);setDistrictText(updated.districts.join(", "));setSaved(true)}catch(e){setError((e as Error).message||"Не удалось сохранить настройки")}finally{setSaving(false)}}
+ if(loading)return <StateBox title="Загружаем настройки…"/>;
+ return <div className="mbw-page"><header className="mbw-heading"><span className="mbw-eyebrow">ПАРАМЕТРЫ ПЛАТФОРМЫ</span><h1>Настройки<span>.</span></h1><p>Автоматическая проверка актуальности объявлений и районы поиска.</p></header>{error&&<div className="mbw-alert" role="alert">{error}</div>}{data?<form className="mbw-settings" onSubmit={e=>void save(e)}><section className="mbw-panel"><h2>Актуальность объявлений</h2><p className="mbw-hint">Система автоматически запрашивает подтверждение у риелтора, отправляет напоминание и скрывает неактуальные объекты.</p><div className="mbw-settings-grid">{([{key:"freshness_days",title:"Первая проверка",hint:"Через сколько дней запросить подтверждение"},{key:"freshness_remind_days",title:"Повторное напоминание",hint:"Через сколько дней после проверки напомнить"},{key:"freshness_hide_days",title:"Автоматическое скрытие",hint:"Через сколько дней после напоминания скрыть"}] as const).map(v=><label key={v.key} className="mbw-setting"><span>{v.title}</span><small>{v.hint}</small><div><input type="number" min="1" max="365" required value={data[v.key]} onChange={e=>{setSaved(false);setData(s=>s?{...s,[v.key]:Number(e.target.value)}:s)}}/><span>дней</span></div></label>)}</div></section><section className="mbw-panel"><h2>Районы Батуми</h2><p className="mbw-hint">Названия через запятую. Используются в настройках платформы.</p><label className="mbw-field">Список районов<textarea rows={4} value={districtText} onChange={e=>{setDistrictText(e.target.value);setSaved(false)}} placeholder="Старый Батуми, Новый бульвар, ..."/></label></section><div className="mbw-settings-footer"><button className="mbw-btn primary" type="submit" disabled={saving}>{saving?"Сохраняем…":"Сохранить настройки"}</button>{saved&&<span className="mbw-saved" role="status">✓ Изменения сохранены</span>}</div></form>:<div className="mbw-empty">Настройки недоступны. Повторите попытку после обновления страницы.</div>}</div>
 }
