@@ -43,6 +43,8 @@ Seed demo data:
 
 ```bash
 cd backend && python -m app.scripts.seed --count 100
+# rich dataset for admin/stats/reviews UI (safe wipe of previous rich seed):
+cd backend && ENV_FILE=../.env PYTHONPATH=. python -m app.scripts.seed_rich --wipe-demo
 ```
 
 ## Acceptance highlights (§16)
