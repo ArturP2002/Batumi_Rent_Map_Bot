@@ -28,6 +28,7 @@ type Preview = {
 };
 
 const BATUMI: [number, number] = [41.6367, 41.6168];
+const MARKER_RELOAD_MS = 280;
 const FALLBACK_STYLE: maplibregl.StyleSpecification = {
   version: 8,
   sources: {
@@ -41,6 +42,18 @@ const FALLBACK_STYLE: maplibregl.StyleSpecification = {
   layers: [{ id: "osm", type: "raster", source: "osm" }],
 };
 
+/** Expand visible bounds slightly so edge pins stay when panning a little. */
+function boundsToBbox(map: maplibregl.Map, padRatio = 0.18): string {
+  const b = map.getBounds();
+  const west = b.getWest();
+  const east = b.getEast();
+  const south = b.getSouth();
+  const north = b.getNorth();
+  const lonPad = Math.max((east - west) * padRatio, 0.002);
+  const latPad = Math.max((north - south) * padRatio, 0.002);
+  return `${west - lonPad},${south - latPad},${east + lonPad},${north + latPad}`;
+}
+
 export function MapPage() {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapObj = useRef<maplibregl.Map | null>(null);
@@ -48,6 +61,8 @@ export function MapPage() {
   const listingsRef = useRef<MapListing[]>([]);
   const clusterSigRef = useRef("");
   const abortRef = useRef<AbortController | null>(null);
+  const loadSeqRef = useRef(0);
+  const reloadTimerRef = useRef<number | null>(null);
   const readyRef = useRef(false);
   const { filters, setFilters } = useFilters();
   const filtersRef = useRef(filters);
@@ -65,6 +80,21 @@ export function MapPage() {
   const focusDone = useRef(false);
 
   filtersRef.current = filters;
+
+  function clearReloadTimer() {
+    if (reloadTimerRef.current != null) {
+      window.clearTimeout(reloadTimerRef.current);
+      reloadTimerRef.current = null;
+    }
+  }
+
+  function scheduleMarkerReload() {
+    clearReloadTimer();
+    reloadTimerRef.current = window.setTimeout(() => {
+      reloadTimerRef.current = null;
+      void loadMarkers();
+    }, MARKER_RELOAD_MS);
+  }
 
   function clearDomMarkers() {
     for (const m of markersRef.current) m.remove();
@@ -150,30 +180,31 @@ export function MapPage() {
     const map = mapObj.current;
     if (!map || !readyRef.current) return;
     map.resize();
-    setLoading(true);
     abortRef.current?.abort();
     const ac = new AbortController();
     abortRef.current = ac;
+    const requestId = ++loadSeqRef.current;
+    setLoading(true);
     const current = filtersRef.current;
     try {
-      const qs = filtersToParams(current);
+      const qs = filtersToParams(current, { bbox: boundsToBbox(map) });
       const items = await api<MapListing[]>(`/api/public/map/markers?${qs}`, {
         signal: ac.signal,
       });
+      if (requestId !== loadSeqRef.current) return;
       listingsRef.current = items;
       setMarkerCount(items.length);
       setError(items.length ? null : "В этой зоне пока нет объявлений");
       renderClusters(true);
     } catch (e) {
-      if ((e as Error).name !== "AbortError") {
-        setError("Не удалось загрузить метки");
-        setMarkerCount(0);
-        listingsRef.current = [];
-        clusterSigRef.current = "";
-        clearDomMarkers();
-      }
+      if ((e as Error).name === "AbortError" || requestId !== loadSeqRef.current) return;
+      setError("Не удалось загрузить метки");
+      setMarkerCount(0);
+      listingsRef.current = [];
+      clusterSigRef.current = "";
+      clearDomMarkers();
     } finally {
-      setLoading(false);
+      if (requestId === loadSeqRef.current) setLoading(false);
     }
   }
 
@@ -200,13 +231,20 @@ export function MapPage() {
       void loadMarkers();
     };
 
-    const onViewChange = () => {
-      if (!readyRef.current || !listingsRef.current.length) return;
-      renderClusters();
+    const onZoomEnd = () => {
+      if (!readyRef.current) return;
+      if (listingsRef.current.length) renderClusters();
+      scheduleMarkerReload();
+    };
+
+    const onMoveEnd = () => {
+      if (!readyRef.current) return;
+      scheduleMarkerReload();
     };
 
     map.on("load", onReady);
-    map.on("zoomend", onViewChange);
+    map.on("zoomend", onZoomEnd);
+    map.on("moveend", onMoveEnd);
     map.on("error", (e) => {
       console.warn("map error", e);
       if (!readyRef.current) {
@@ -227,6 +265,9 @@ export function MapPage() {
     return () => {
       cancelled = true;
       readyRef.current = false;
+      clearReloadTimer();
+      abortRef.current?.abort();
+      loadSeqRef.current += 1;
       ro?.disconnect();
       clearDomMarkers();
       map.remove();
@@ -236,6 +277,7 @@ export function MapPage() {
   }, []);
 
   useEffect(() => {
+    clearReloadTimer();
     void loadMarkers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);

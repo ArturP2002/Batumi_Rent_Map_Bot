@@ -1,5 +1,6 @@
 /* Step 7: scoped admin workflow pages; builds on AdminModernBlue.css. */
 .mbw-page{--mbw-blue:#173c72;--mbw-accent:#3478d4;--mbw-ink:#26384e;--mbw-muted:#75879c;--mbw-line:#e4ebf5;display:grid;gap:19px;color:var(--mbw-ink);padding-bottom:40px}
+.mbw-load-more{width:100%;min-height:46px;justify-content:center}
 .mbw-page *{box-sizing:border-box}.mbw-page button{cursor:pointer}.mbw-page button:disabled{cursor:not-allowed;opacity:.55}
 .mbw-heading{padding:3px 0 5px}.mbw-heading-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}.mbw-eyebrow{color:#7890b0;font-weight:800;letter-spacing:.15em;font-size:10px}.mbw-heading h1{margin:6px 0;font-size:clamp(27px,4vw,39px);line-height:1.1;letter-spacing:-.045em;color:var(--mbw-blue)}.mbw-heading h1 span{color:var(--mbw-accent)}.mbw-heading p{font-size:13px;color:var(--mbw-muted);margin:9px 0 0;line-height:1.5}
 .mbw-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.mbw-tabs{display:flex;gap:7px;flex:1;overflow-x:auto;scrollbar-width:none;padding:2px 0}.mbw-tabs button{min-width:max-content;background:#fff;border:1px solid var(--mbw-line);border-radius:11px;padding:10px 13px;color:#647b97;font-size:12px;font-weight:700}.mbw-tabs button.active{background:var(--mbw-blue);color:#fff;border-color:var(--mbw-blue)}
