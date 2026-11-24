@@ -1,0 +1,1 @@
+"""Batumi Rent Map backend."""
