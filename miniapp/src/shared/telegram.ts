@@ -18,18 +18,23 @@ function applySafeAreaVars(app: TgWebApp) {
   const contentTop = content?.top ?? 0;
   const contentBottom = content?.bottom ?? 0;
 
+  const fullscreen = Boolean(app.isFullscreen);
+  // Fullscreen: chrome overlays the webview → apply safe + content insets.
+  // Expanded: webview already sits below Telegram UI → ignore content inset (avoids a huge top gap).
+  const appliedContentTop = fullscreen ? contentTop : 0;
+  const appliedContentBottom = fullscreen ? contentBottom : 0;
+  const needsFallback = fullscreen && contentTop < 28;
+
   root.style.setProperty("--tg-safe-top", `${safeTop}px`);
   root.style.setProperty("--tg-safe-bottom", `${safeBottom}px`);
   root.style.setProperty("--tg-safe-left", `${safeLeft}px`);
   root.style.setProperty("--tg-safe-right", `${safeRight}px`);
-  root.style.setProperty("--tg-content-safe-top", `${contentTop}px`);
-  root.style.setProperty("--tg-content-safe-bottom", `${contentBottom}px`);
+  root.style.setProperty("--tg-content-safe-top", `${appliedContentTop}px`);
+  root.style.setProperty("--tg-content-safe-bottom", `${appliedContentBottom}px`);
+  root.style.setProperty("--ui-top-gap", needsFallback ? "36px" : "0px");
 
-  // Fallback when Telegram reports empty content inset in fullscreen:
-  // leave room for the native «Закрыть» / controls row (~44–56px under status bar).
-  const fullscreen = Boolean(app.isFullscreen);
-  const needsFallback = fullscreen && contentTop < 40;
-  root.style.setProperty("--ui-top-gap", needsFallback ? "52px" : "8px");
+  const mapTop = safeTop + appliedContentTop + (needsFallback ? 36 : 0);
+  root.style.setProperty("--map-top-inset", `${mapTop}px`);
   root.dataset.tgFullscreen = fullscreen ? "1" : "0";
 }
 

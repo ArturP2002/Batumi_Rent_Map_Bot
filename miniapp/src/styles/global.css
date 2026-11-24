@@ -16,11 +16,13 @@
   --tg-safe-right: 0px;
   --tg-content-safe-top: 0px;
   --tg-content-safe-bottom: 0px;
-  /* Telegram fullscreen: content inset sits BELOW system safe area — add them. */
+  /* Telegram fullscreen: content inset sits BELOW system safe area — add them.
+     --ui-top-gap is only a fallback when content inset is missing (see telegram.ts). */
   --safe-top: calc(
     max(env(safe-area-inset-top, 0px), var(--tg-safe-top)) + var(--tg-content-safe-top) +
       var(--ui-top-gap, 0px)
   );
+  --map-top-inset: var(--safe-top);
   --safe-bottom: calc(
     max(env(safe-area-inset-bottom, 0px), var(--tg-safe-bottom)) + var(--tg-content-safe-bottom)
   );
