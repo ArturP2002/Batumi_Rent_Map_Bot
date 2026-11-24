@@ -188,9 +188,49 @@ async def list_markers(
     db: AsyncSession,
     filters: PropertyFilters,
 ) -> list[Property]:
-    filters = filters.model_copy(update={"page": 1, "page_size": 2000})
-    items, _ = await search_properties(db, filters, only_active=True)
-    return [p for p in items if p.lat is not None and p.lon is not None]
+    """Lightweight map pin query — no photos/features/realtor joins, no COUNT."""
+    conditions = [
+        Property.status == PropertyStatus.ACTIVE.value,
+        Property.lat.is_not(None),
+        Property.lon.is_not(None),
+    ]
+    stmt = select(Property)
+
+    if filters.rent_type:
+        conditions.append(Property.rent_type == filters.rent_type)
+    if filters.rooms:
+        conditions.append(Property.rooms.in_(filters.rooms))
+    if filters.price_min is not None:
+        conditions.append(Property.price_usd >= filters.price_min)
+    if filters.price_max is not None:
+        conditions.append(Property.price_usd <= filters.price_max)
+    if filters.bbox:
+        min_lon, min_lat, max_lon, max_lat = _parse_bbox(filters.bbox)
+        conditions.append(Property.lon >= min_lon)
+        conditions.append(Property.lon <= max_lon)
+        conditions.append(Property.lat >= min_lat)
+        conditions.append(Property.lat <= max_lat)
+
+    if filters.amenities:
+        stmt = stmt.join(PropertyFeature)
+        for key in filters.amenities:
+            if hasattr(PropertyFeature, key):
+                conditions.append(getattr(PropertyFeature, key).is_(True))
+
+    stmt = (
+        stmt.where(and_(*conditions))
+        .order_by(Property.updated_at.desc())
+        .limit(1500)
+    )
+    items = list((await db.execute(stmt)).scalars().unique().all())
+
+    if filters.check_in and filters.check_out and filters.rent_type == RentType.DAILY.value:
+        ok = await _available_for_dates(
+            db, [p.id for p in items], filters.check_in, filters.check_out
+        )
+        items = [p for p in items if p.id in ok]
+
+    return items
 
 
 async def toggle_favorite(db: AsyncSession, user_id: int, property_id: int) -> bool:

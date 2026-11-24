@@ -28,7 +28,10 @@ type Preview = {
 };
 
 const BATUMI: [number, number] = [41.6367, 41.6168];
-const MARKER_RELOAD_MS = 280;
+/** Debounce viewport API reloads — local reclustering stays instant. */
+const MARKER_RELOAD_MS = 520;
+/** Fetch a wider area so small pans/zooms reuse cached listings. */
+const FETCH_PAD_RATIO = 0.55;
 const FALLBACK_STYLE: maplibregl.StyleSpecification = {
   version: 8,
   sources: {
@@ -42,8 +45,9 @@ const FALLBACK_STYLE: maplibregl.StyleSpecification = {
   layers: [{ id: "osm", type: "raster", source: "osm" }],
 };
 
-/** Expand visible bounds slightly so edge pins stay when panning a little. */
-function boundsToBbox(map: maplibregl.Map, padRatio = 0.18): string {
+type LngLatBoundsLike = { west: number; south: number; east: number; north: number };
+
+function mapBounds(map: maplibregl.Map, padRatio = 0): LngLatBoundsLike {
   const b = map.getBounds();
   const west = b.getWest();
   const east = b.getEast();
@@ -51,15 +55,42 @@ function boundsToBbox(map: maplibregl.Map, padRatio = 0.18): string {
   const north = b.getNorth();
   const lonPad = Math.max((east - west) * padRatio, 0.002);
   const latPad = Math.max((north - south) * padRatio, 0.002);
-  return `${west - lonPad},${south - latPad},${east + lonPad},${north + latPad}`;
+  return {
+    west: west - lonPad,
+    south: south - latPad,
+    east: east + lonPad,
+    north: north + latPad,
+  };
+}
+
+function boundsToBbox(bounds: LngLatBoundsLike): string {
+  return `${bounds.west},${bounds.south},${bounds.east},${bounds.north}`;
+}
+
+/** True when current viewport still sits comfortably inside the last fetched area. */
+function viewportInsideLoaded(map: maplibregl.Map, loaded: LngLatBoundsLike | null): boolean {
+  if (!loaded) return false;
+  const view = mapBounds(map, 0);
+  const lonSpan = Math.max(loaded.east - loaded.west, 0.001);
+  const latSpan = Math.max(loaded.north - loaded.south, 0.001);
+  const marginLon = lonSpan * 0.08;
+  const marginLat = latSpan * 0.08;
+  return (
+    view.west >= loaded.west + marginLon &&
+    view.east <= loaded.east - marginLon &&
+    view.south >= loaded.south + marginLat &&
+    view.north <= loaded.north - marginLat
+  );
 }
 
 export function MapPage() {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapObj = useRef<maplibregl.Map | null>(null);
-  const markersRef = useRef<maplibregl.Marker[]>([]);
+  const markersByKeyRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+  const clusterByKeyRef = useRef<Map<string, MapCluster>>(new Map());
   const listingsRef = useRef<MapListing[]>([]);
   const clusterSigRef = useRef("");
+  const loadedBoundsRef = useRef<LngLatBoundsLike | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const loadSeqRef = useRef(0);
   const reloadTimerRef = useRef<number | null>(null);
@@ -92,13 +123,14 @@ export function MapPage() {
     clearReloadTimer();
     reloadTimerRef.current = window.setTimeout(() => {
       reloadTimerRef.current = null;
-      void loadMarkers();
+      void loadMarkers(false);
     }, MARKER_RELOAD_MS);
   }
 
   function clearDomMarkers() {
-    for (const m of markersRef.current) m.remove();
-    markersRef.current = [];
+    for (const marker of markersByKeyRef.current.values()) marker.remove();
+    markersByKeyRef.current.clear();
+    clusterByKeyRef.current.clear();
   }
 
   function openListing(item: MapListing) {
@@ -122,13 +154,27 @@ export function MapPage() {
       return;
     }
 
-    // Zoom into cluster — points will split on next render
     const nextZoom = Math.min(map.getZoom() + 1.8, 17.5);
     map.easeTo({
       center: [cluster.lon, cluster.lat],
       zoom: nextZoom,
       duration: 420,
     });
+  }
+
+  function syncMarkerElement(root: HTMLButtonElement, cluster: MapCluster) {
+    let body = root.querySelector(".map-marker") as HTMLSpanElement | null;
+    if (!body) {
+      body = document.createElement("span");
+      root.appendChild(body);
+    }
+    const colorClass = cluster.rentType === "daily" ? "is-daily" : "is-long";
+    body.className = `map-marker map-marker--${cluster.visual} ${colorClass}`;
+    body.textContent = clusterLabel(cluster);
+    root.setAttribute(
+      "aria-label",
+      cluster.count > 1 ? `${cluster.count} объявлений` : "Объявление",
+    );
   }
 
   function renderClusters(force = false) {
@@ -145,54 +191,66 @@ export function MapPage() {
       .join("|");
     if (!force && sig === clusterSigRef.current) return;
     clusterSigRef.current = sig;
-    clearDomMarkers();
+
+    const nextKeys = new Set(clusters.map((c) => c.key));
+    for (const [key, marker] of markersByKeyRef.current) {
+      if (!nextKeys.has(key)) {
+        marker.remove();
+        markersByKeyRef.current.delete(key);
+        clusterByKeyRef.current.delete(key);
+      }
+    }
 
     for (const cluster of clusters) {
-      // Root element is owned by MapLibre (inline transform). Visuals go inside.
+      clusterByKeyRef.current.set(cluster.key, cluster);
+      const existing = markersByKeyRef.current.get(cluster.key);
+      if (existing) {
+        existing.setLngLat([cluster.lon, cluster.lat]);
+        syncMarkerElement(existing.getElement() as HTMLButtonElement, cluster);
+        continue;
+      }
+
       const root = document.createElement("button");
       root.type = "button";
       root.className = "map-marker-root";
-      root.setAttribute(
-        "aria-label",
-        cluster.count > 1 ? `${cluster.count} объявлений` : "Объявление",
-      );
-
-      const body = document.createElement("span");
-      const colorClass = cluster.rentType === "daily" ? "is-daily" : "is-long";
-      body.className = `map-marker map-marker--${cluster.visual} ${colorClass}`;
-      const label = clusterLabel(cluster);
-      if (label) body.textContent = label;
-      root.appendChild(body);
-
+      syncMarkerElement(root, cluster);
       root.addEventListener("click", (ev) => {
         ev.stopPropagation();
-        handleClusterClick(cluster);
+        const latest = clusterByKeyRef.current.get(cluster.key);
+        if (latest) handleClusterClick(latest);
       });
 
       const marker = new maplibregl.Marker({ element: root, anchor: "bottom" })
         .setLngLat([cluster.lon, cluster.lat])
         .addTo(map);
-      markersRef.current.push(marker);
+      markersByKeyRef.current.set(cluster.key, marker);
     }
   }
 
-  async function loadMarkers() {
+  async function loadMarkers(force = false) {
     const map = mapObj.current;
     if (!map || !readyRef.current) return;
+    if (!force && viewportInsideLoaded(map, loadedBoundsRef.current)) {
+      renderClusters();
+      return;
+    }
+
     map.resize();
     abortRef.current?.abort();
     const ac = new AbortController();
     abortRef.current = ac;
     const requestId = ++loadSeqRef.current;
+    const fetchBounds = mapBounds(map, FETCH_PAD_RATIO);
     setLoading(true);
     const current = filtersRef.current;
     try {
-      const qs = filtersToParams(current, { bbox: boundsToBbox(map) });
+      const qs = filtersToParams(current, { bbox: boundsToBbox(fetchBounds) });
       const items = await api<MapListing[]>(`/api/public/map/markers?${qs}`, {
         signal: ac.signal,
       });
       if (requestId !== loadSeqRef.current) return;
       listingsRef.current = items;
+      loadedBoundsRef.current = fetchBounds;
       setMarkerCount(items.length);
       setError(items.length ? null : "В этой зоне пока нет объявлений");
       renderClusters(true);
@@ -201,6 +259,7 @@ export function MapPage() {
       setError("Не удалось загрузить метки");
       setMarkerCount(0);
       listingsRef.current = [];
+      loadedBoundsRef.current = null;
       clusterSigRef.current = "";
       clearDomMarkers();
     } finally {
@@ -225,21 +284,22 @@ export function MapPage() {
     mapObj.current = map;
 
     const onReady = () => {
-      if (cancelled) return;
+      if (cancelled || readyRef.current) return;
       readyRef.current = true;
       map.resize();
-      void loadMarkers();
+      void loadMarkers(true);
     };
 
     const onZoomEnd = () => {
       if (!readyRef.current) return;
+      // Instant local recluster; fetch only if we left the cached bbox.
       if (listingsRef.current.length) renderClusters();
-      scheduleMarkerReload();
+      if (!viewportInsideLoaded(map, loadedBoundsRef.current)) scheduleMarkerReload();
     };
 
     const onMoveEnd = () => {
       if (!readyRef.current) return;
-      scheduleMarkerReload();
+      if (!viewportInsideLoaded(map, loadedBoundsRef.current)) scheduleMarkerReload();
     };
 
     map.on("load", onReady);
@@ -268,6 +328,7 @@ export function MapPage() {
       clearReloadTimer();
       abortRef.current?.abort();
       loadSeqRef.current += 1;
+      loadedBoundsRef.current = null;
       ro?.disconnect();
       clearDomMarkers();
       map.remove();
@@ -277,8 +338,11 @@ export function MapPage() {
   }, []);
 
   useEffect(() => {
+    // Filter changes invalidate the bbox cache; skip until map is ready (onReady loads first).
+    if (!readyRef.current) return;
     clearReloadTimer();
-    void loadMarkers();
+    loadedBoundsRef.current = null;
+    void loadMarkers(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 

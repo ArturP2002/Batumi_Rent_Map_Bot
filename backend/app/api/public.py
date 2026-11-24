@@ -91,6 +91,7 @@ async def map_markers(
         bbox=bbox,
     )
     items = await properties_svc.list_markers(db, filters)
+    # cover_url omitted on purpose — preview card loads property detail on tap
     return [
         PropertyMarkerOut(
             id=p.id,
@@ -102,7 +103,7 @@ async def map_markers(
             lon=p.lon or 0,
             district=p.district,
             area_m2=p.area_m2,
-            cover_url=(p.photos[0].thumb_url or p.photos[0].url) if p.photos else None,
+            cover_url=None,
         )
         for p in items
     ]
