@@ -9,12 +9,22 @@ from aiogram.types import (
 from app.core.config import get_settings
 
 
-def webapp_button(text: str, startapp: str = "") -> InlineKeyboardButton:
-    url = get_settings().webapp_url
+def webapp_url(*, path: str = "", startapp: str = "") -> str:
+    """Build Mini App URL. Prefer a real path for deep links (avoids / → /map race)."""
+    base = get_settings().webapp_url.rstrip("/")
+    url = f"{base}{path}" if path else base
     if startapp:
         sep = "&" if "?" in url else "?"
         url = f"{url}{sep}startapp={startapp}"
-    return InlineKeyboardButton(text=text, web_app=WebAppInfo(url=url))
+    return url
+
+
+def webapp_button(
+    text: str, startapp: str = "", *, path: str = ""
+) -> InlineKeyboardButton:
+    return InlineKeyboardButton(
+        text=text, web_app=WebAppInfo(url=webapp_url(path=path, startapp=startapp))
+    )
 
 
 def role_choice_kb() -> ReplyKeyboardMarkup:
@@ -71,7 +81,9 @@ def open_map_kb() -> InlineKeyboardMarkup:
 
 def open_admin_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
-        inline_keyboard=[[webapp_button("Открыть админ-панель", "admin")]]
+        inline_keyboard=[
+            [webapp_button("Открыть админ-панель", "admin", path="/admin")]
+        ]
     )
 
 

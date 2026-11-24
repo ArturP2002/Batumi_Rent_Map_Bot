@@ -1,5 +1,5 @@
-import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
-import { useEffect } from "react";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useRef } from "react";
 import { HomePage } from "@/features/public/HomePage";
 import { MapPage } from "@/features/public/MapPage";
 import { ListPage } from "@/features/public/ListPage";
@@ -17,28 +17,36 @@ import { DealsPage } from "@/features/admin/DealsPage";
 import { ReviewsPage } from "@/features/admin/ReviewsPage";
 import { StatsPage } from "@/features/admin/StatsPage";
 import { SettingsPage } from "@/features/admin/SettingsPage";
+import { parseStartApp, pathForStartApp } from "@/shared/startApp";
 
-function parseStartApp(): string | null {
-  const fromTg = window.Telegram?.WebApp?.initDataUnsafe?.start_param;
-  if (fromTg) return fromTg;
-  const url = new URL(window.location.href);
-  return url.searchParams.get("startapp");
-}
-
+/** Apply Telegram startapp deep-links (with a short retry — initData can arrive late). */
 function StartAppRedirect() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const applied = useRef(false);
+
   useEffect(() => {
-    const param = parseStartApp();
-    if (!param) return;
-    if (param.startsWith("property_")) navigate(`/property/${param.slice(9)}`, { replace: true });
-    else if (param.startsWith("realtor_")) navigate(`/realtor/${param.slice(8)}`, { replace: true });
-    else if (param.startsWith("deal_")) navigate(`/deal/${param.slice(5)}`, { replace: true });
-    else if (param === "favorites") navigate("/favorites", { replace: true });
-    else if (param === "admin") navigate("/admin", { replace: true });
-    else if (param === "admin_listings") navigate("/admin/listings", { replace: true });
-    else if (param === "admin_deals") navigate("/admin/deals", { replace: true });
-    else if (param === "admin_reviews") navigate("/admin/reviews", { replace: true });
-  }, [navigate]);
+    if (applied.current) return;
+
+    const tryApply = () => {
+      if (applied.current) return;
+      const target = pathForStartApp(parseStartApp());
+      if (!target) return;
+      applied.current = true;
+      if (location.pathname !== target) {
+        navigate(target, { replace: true });
+      }
+    };
+
+    tryApply();
+    const t1 = window.setTimeout(tryApply, 50);
+    const t2 = window.setTimeout(tryApply, 300);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [navigate, location.pathname]);
+
   return null;
 }
 

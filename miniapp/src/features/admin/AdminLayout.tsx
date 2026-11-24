@@ -1,4 +1,4 @@
-import { Link, Navigate, NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "@/shared/auth";
 import { StateBox } from "@/shared/ui";
 import "./AdminModernBlue.css";
@@ -14,9 +14,26 @@ const navigation = [
 ];
 
 export function AdminLayout() {
-  const { isAdmin, loading } = useAuth();
+  const { isAdmin, loading, refresh } = useAuth();
   if (loading) return <StateBox title="Проверяем доступ…" />;
-  if (!isAdmin) return <Navigate to="/map" replace />;
+  if (!isAdmin) {
+    return (
+      <div className="mba-shell" style={{ padding: 24 }}>
+        <StateBox title="Нет доступа к админ-панели" />
+        <p style={{ textAlign: "center", color: "#75869b", marginTop: 8 }}>
+          Войдите через Telegram под аккаунтом администратора.
+        </p>
+        <div style={{ display: "grid", gap: 10, maxWidth: 360, margin: "18px auto 0" }}>
+          <button type="button" className="mba-nav-item" onClick={() => void refresh()}>
+            Повторить проверку
+          </button>
+          <Link to="/map" className="mba-nav-item">
+            ← На карту
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mba-shell">
