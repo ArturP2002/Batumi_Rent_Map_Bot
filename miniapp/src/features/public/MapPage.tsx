@@ -15,6 +15,7 @@ import {
 } from "@/shared/mapClusters";
 import { PropertyCardItem } from "@/shared/ui";
 import { FiltersSheet } from "./FiltersSheet";
+import { ModernBlueMapHeader } from "./ModernBlueMapHeader";
 
 type Preview = {
   id: number;
@@ -319,46 +320,18 @@ export function MapPage() {
         <div className="map-canvas" ref={mapRef} />
       </div>
 
-      <div className="map-top">
-        <div className="map-brand">
-          <span className="map-brand-mark" aria-hidden />
-          <strong>Batumi Rent</strong>
-        </div>
-        <div className="map-controls">
-          <button
-            type="button"
-            className={`chip ${filters.rent_type === "long_term" ? "active" : ""}`}
-            onClick={() => setFilters((p) => ({ ...p, rent_type: "long_term" }))}
-          >
-            Долгосрочно
-          </button>
-          <button
-            type="button"
-            className={`chip chip-daily ${filters.rent_type === "daily" ? "active" : ""}`}
-            onClick={() => setFilters((p) => ({ ...p, rent_type: "daily" }))}
-          >
-            Посуточно
-          </button>
-          <button type="button" className="chip" onClick={() => setShowFilters(true)}>
-            Фильтры
-          </button>
-          <Link className="chip" to="/list">
-            Список
-          </Link>
-          <button type="button" className="chip" onClick={() => setShowMenu(true)}>
-            Меню
-          </button>
-        </div>
+      <ModernBlueMapHeader
+        rentType={filters.rent_type}
+        onRentTypeChange={(rent_type) => setFilters((p) => ({ ...p, rent_type }))}
+        onFilters={() => setShowFilters(true)}
+        onMenu={() => setShowMenu(true)}
+      >
         {loading && <div className="map-status is-loading">Обновляем карту…</div>}
         {!loading && markerCount > 0 && (
-          <div className="map-status">{markerCount} на карте · масштабируйте для деталей</div>
+          <div className="map-status">{markerCount} квартир на карте</div>
         )}
-        {error && (
-          <div className="map-status" style={{ background: "rgba(220,38,38,.85)" }}>
-            {error}
-          </div>
-        )}
-      </div>
+        {error && <div className="map-status">{error}</div>}
+      </ModernBlueMapHeader>
 
       <div className="map-dock">
         {preview && !clusterList && (

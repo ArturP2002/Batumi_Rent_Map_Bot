@@ -1,0 +1,42 @@
+/* Modern Blue — map design layer. Import AFTER global.css. */
+:root {
+  --mb-primary:#173C72; --mb-accent:#3478D4; --mb-surface:#EAF1FA;
+  --mb-text:#26384E; --mb-muted:#647A95; --mb-white:#fff;
+  --mb-shadow:0 12px 36px rgba(20,45,80,.14);
+  --font-ui:'Manrope','IBM Plex Sans',system-ui,sans-serif;
+  --font-display:var(--font-ui);
+}
+.mb-map-header {
+  position:absolute; z-index:8;
+  top:calc(var(--safe-top, 0px) + 12px);
+  left:max(14px,var(--safe-left,0px));right:max(14px,var(--safe-right,0px));
+  display:grid;gap:10px;pointer-events:none;
+}
+.mb-map-header > * {pointer-events:auto}
+.mb-map-headline {display:flex;align-items:center;justify-content:space-between;gap:12px}
+.mb-brand {display:flex;gap:10px;align-items:center;color:var(--mb-primary);text-shadow:0 1px 12px rgba(255,255,255,.85)}
+.mb-brand-symbol {display:grid;place-items:center;width:42px;height:42px;border-radius:15px;background:var(--mb-primary);color:#fff;font-size:26px;box-shadow:var(--mb-shadow)}
+.mb-brand strong {display:block;font-size:17px;line-height:1.15;font-weight:800;letter-spacing:-.035em}
+.mb-brand small {display:block;font-size:11px;font-weight:600;color:#526A86;margin-top:3px}
+.mb-icon-button {border:0;background:#fff;width:44px;height:44px;border-radius:50%;font-size:19px;color:var(--mb-primary);box-shadow:var(--mb-shadow);cursor:pointer}
+.mb-segment {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;padding:4px;background:rgba(255,255,255,.96);border-radius:999px;box-shadow:var(--mb-shadow)}
+.mb-segment button {min-height:43px;padding:8px 10px;border:0;border-radius:999px;background:transparent;color:#536A86;font-weight:750;cursor:pointer;font-size:13px}
+.mb-segment button.is-selected {background:var(--mb-primary);color:#fff}
+.mb-map-actions {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.mb-map-actions > * {display:flex;justify-content:center;align-items:center;gap:9px;min-height:44px;border:0;background:#fff;color:var(--mb-primary);border-radius:999px;box-shadow:var(--mb-shadow);font-weight:750;font-size:13px;cursor:pointer}
+.mb-map-actions span {font-size:18px;line-height:1}
+/* A selected map object uses the existing map-pick structure. */
+.page-map-full .map-dock {bottom:calc(var(--safe-bottom,0px) + 18px);left:max(14px,var(--safe-left,0px));right:max(14px,var(--safe-right,0px));max-width:430px}
+.page-map-full .map-pick {border:0;border-radius:25px;padding:11px;grid-template-columns:104px minmax(0,1fr);gap:12px;background:rgba(255,255,255,.98);box-shadow:0 18px 46px rgba(20,45,80,.19)}
+.page-map-full .map-pick img {width:104px;height:112px;border-radius:17px}
+.page-map-full .map-pick .price {color:var(--mb-primary);font-weight:850;font-size:23px;letter-spacing:-.035em}
+.page-map-full .map-pick-actions .btn-primary {background:var(--mb-primary);border-radius:999px}
+/* Colored markers distinguish active selection and grouped properties. */
+.page-map-full .map-marker {--marker:var(--mb-primary);--marker-deep:#112f5b;--marker-glow:rgba(23,60,114,.2)}
+.page-map-full .map-marker.is-daily {--marker:#337da3;--marker-deep:#236481;--marker-glow:rgba(51,125,163,.2)}
+.page-map-full .map-marker--summary,.page-map-full .map-marker--building,.page-map-full .map-marker--price {border:2px solid #fff;box-shadow:0 5px 16px rgba(20,45,80,.18)}
+.page-map-full .map-marker-root:focus-visible .map-marker {outline:3px solid #91c0ff;outline-offset:3px}
+/* Keep navigation controls clear of the new header on narrow screens. */
+.page-map-full .maplibregl-ctrl-top-right {top:calc(var(--safe-top,0px) + 172px)}
+@media (max-width:360px) {.mb-map-header {left:10px;right:10px;gap:8px}.mb-brand strong {font-size:15px}.mb-segment button {font-size:12px}}
+@media (prefers-reduced-motion:reduce) {.mb-map-header * {transition:none!important;animation:none!important}}
